@@ -38,6 +38,23 @@ def start_capture(callback , iface="ens33"):
 
 if __name__ == "__main__":
     def print_packet(record):
-        print(record)
+        proto = record["proto"]
+        src = record["src"]
+        dst = record["dst"]
+        sport = record["sport"]
+        dport = record["dport"]
+        ttl = record["ttl"]
+        flags = record["flags"]
+        length = record["length"]
+
+        if proto == "DNS":
+            print(f"[DNS]  {src} -> {dst}  len={length}")
+        elif proto == "TCP":
+            print(f"[TCP]  {src}:{sport} -> {dst}:{dport}  flags={flags}  TTL={ttl}  len={length}")
+        elif proto == "UDP":
+            print(f"[UDP]  {src}:{sport} -> {dst}:{dport}  TTL={ttl}  len={length}")
+        else:
+            print(f"[???]  {src} -> {dst}  TTL={ttl}  len={length}")
+
     start_capture(print_packet)
 
