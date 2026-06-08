@@ -2,6 +2,7 @@ import asyncio
 import threading
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from capture import start_capture
+from rule_engine import evaluate
 
 app = FastAPI()
 clients = set()
@@ -16,9 +17,24 @@ async def broadcast(record):
             disconnect.add(ws)
     clients.difference_update(disconnect)
 
+async def batch_sender():
+    while True:
+        await asyncio.sleep(1)
+        with batch_lock:
+            if packet_batch and clients:
+                batch = packet_batch.copy()
+                packet_batch.clear()
+            else:
+                batch = []
+        if batch:
+            await broadcast({"type": "batch", "packets": batch})
+
 def on_packet(record):
-    if loop and clients:
-        asyncio.run_coroutine_threadsafe(broadcast(record), loop)
+    alert = evaluate(record)
+    if alert:
+        record["alert"]=alert
+    with batch_lock:
+        packet_batch.append(record)
 
 @app.on_event("startup")
 async def startup():
@@ -26,6 +42,7 @@ async def startup():
     loop = asyncio.get_event_loop()
     thread = threading.Thread(target=start_capture, args=(on_packet,), daemon=True)
     thread.start()
+    asyncio.ensure_future(batch_sender())
     print("[*] Capture thread started")
 
 @app.websocket("/ws")
