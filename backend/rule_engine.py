@@ -1,8 +1,22 @@
 from collections import defaultdict, deque
-import time
+import time, ipaddress
 
 syn_tracker = defaultdict(list)    # port scan detection
 beacon_tracker = defaultdict(list) # beaconing detection
+Whitelist_ranges = [
+    ipaddress.ip_network("162.158.0.0/15"),   # Cloudflare
+    ipaddress.ip_network("172.64.0.0/13"),     # Cloudflare
+    ipaddress.ip_network("104.16.0.0/13"),     # Cloudflare
+    ipaddress.ip_network("8.8.8.0/24"),        # Google DNS
+    ipaddress.ip_network("146.75.0.0/16"),     # Fastly CDN
+]
+
+def is_whitelisted(ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+        return any(addr in network for network in Whitelist_ranges)
+    except ValueError:
+        return False
 
 def evaluate(record) -> dict | None:
     src = record["src"]
@@ -51,7 +65,7 @@ def evaluate(record) -> dict | None:
         beacon_tracker[key].append(time.time())
 
         # only analyze once we have at least 5 data points
-        if len(beacon_tracker[key]) >= 5:
+        if len(beacon_tracker[key]) >= 10:
             # keep only last 10 entries
             beacon_tracker[key] = beacon_tracker[key][-10:]
 
@@ -63,6 +77,10 @@ def evaluate(record) -> dict | None:
             variance = max(intervals) - min(intervals)
 
             if variance < 0.5:
+                src_ip = key.split("->")[0]
+                dst_ip = key.split("->")[1]
+                if is_whitelisted(src_ip) or is_whitelisted(dst_ip):
+                    return None
                 return {
                     "alert": "BEACONING_DETECTED",
                     "host_pair": key,

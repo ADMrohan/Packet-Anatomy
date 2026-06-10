@@ -7,6 +7,8 @@ from rule_engine import evaluate
 app = FastAPI()
 clients = set()
 loop = None
+batch_lock = threading.Lock()
+packet_batch = []
 
 async def broadcast(record):
     disconnect = set()
